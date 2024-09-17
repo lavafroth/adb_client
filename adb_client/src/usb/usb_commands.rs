@@ -1,29 +1,26 @@
 use std::fmt::Display;
 
 use crate::RustADBError;
-
-#[derive(Debug, Eq, PartialEq)]
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
+#[repr(u32)]
 pub enum USBCommand {
     // Connect to a device
-    Cnxn,
+    Cnxn = 0x4e584e43,
     // Close connection to a device
-    Clse,
+    Clse = 0x45534c43,
     // Device ask for authentication
-    Auth, // OTHERS
-          // A_SYNC 0x434e5953
-          // A_OPEN 0x4e45504f
-          // A_OKAY 0x59414b4f
-          // A_WRTE 0x45545257
-          // A_STLS 0x534C5453
+    Auth = 0x48545541, // OTHERS
+                       // A_SYNC 0x434e5953
+                       // A_OPEN 0x4e45504f
+                       // A_OKAY 0x59414b4f
+                       // A_WRTE 0x45545257
+                       // A_STLS 0x534C5453
 }
 
 impl USBCommand {
-    pub fn to_u32(&self) -> u32 {
-        match self {
-            Self::Cnxn => 0x4e584e43,
-            Self::Clse => 0x45534c43,
-            Self::Auth => 0x48545541,
-        }
+    pub fn to_u32(self) -> u32 {
+        self as u32
     }
 }
 
