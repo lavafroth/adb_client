@@ -35,7 +35,6 @@ impl AdbUsbMessageHeader {
 
 impl ADBUsbMessage {
     pub fn new(command: USBCommand, arg0: u32, arg1: u32, data: Vec<u8>) -> Self {
-        let command_u32 = command.to_u32();
         Self {
             header: AdbUsbMessageHeader {
                 command,
@@ -43,7 +42,7 @@ impl ADBUsbMessage {
                 arg1,
                 data_length: data.len() as u32,
                 data_crc32: data.iter().map(|&x| x as u32).sum(),
-                magic: command_u32 ^ 0xFFFFFFFF,
+                magic: command as u32 ^ 0xFFFFFFFF,
             },
             payload: data,
         }

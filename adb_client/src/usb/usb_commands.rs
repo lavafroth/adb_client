@@ -18,12 +18,6 @@ pub enum USBCommand {
                        // A_STLS 0x534C5453
 }
 
-impl USBCommand {
-    pub fn to_u32(self) -> u32 {
-        self as u32
-    }
-}
-
 impl Display for USBCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
