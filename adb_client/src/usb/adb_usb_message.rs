@@ -14,7 +14,7 @@ pub struct ADBUsbMessage {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[repr(C)]
-pub struct AdbUsbMessageHeader {
+pub(crate) struct AdbUsbMessageHeader {
     pub command: USBCommand, /* command identifier constant      */
     pub arg0: u32,           /* first argument                   */
     pub arg1: u32,           /* second argument                  */
