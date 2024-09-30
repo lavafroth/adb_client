@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-use crate::RustADBError;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
@@ -24,19 +23,6 @@ impl Display for USBCommand {
             USBCommand::Cnxn => write!(f, "CNXN"),
             USBCommand::Clse => write!(f, "CLSE"),
             USBCommand::Auth => write!(f, "AUTH"),
-        }
-    }
-}
-
-impl TryFrom<&[u8]> for USBCommand {
-    type Error = RustADBError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        match u32::from_le_bytes(value.try_into().unwrap()) {
-            0x4e584e43 => Ok(Self::Cnxn),
-            0x45534c43 => Ok(Self::Clse),
-            0x48545541 => Ok(Self::Auth),
-            _ => Err(RustADBError::ConversionError),
         }
     }
 }

@@ -62,7 +62,8 @@ impl TryFrom<[u8; 24]> for ADBUsbMessage {
 
     fn try_from(value: [u8; 24]) -> Result<Self, Self::Error> {
         // TODO: add variant in Error enum to remove this unwrap
-        let header: AdbUsbMessageHeader = bincode::deserialize(&value).unwrap();
+        let header: AdbUsbMessageHeader =
+            bincode::deserialize(&value).map_err(|_e| RustADBError::ConversionError)?;
 
         // Check checksum
         if !header.check_message_integrity() {
