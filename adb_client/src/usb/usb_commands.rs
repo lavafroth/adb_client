@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
 use crate::RustADBError;
-use serde::{Deserialize, Serialize};
-#[derive(Debug, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
+use serde_repr::{Deserialize_repr, Serialize_repr};
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
 pub enum USBCommand {
     // Connect to a device
