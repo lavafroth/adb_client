@@ -49,6 +49,8 @@ impl ADBUsbMessage {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
+        // safety: the header struct is public only to crate modules
+        // we ensure that we control its creation and modifications
         bincode::serialize(&self.header).unwrap()
     }
 
