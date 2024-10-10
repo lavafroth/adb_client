@@ -10,11 +10,11 @@ pub enum USBCommand {
     Clse = 0x45534c43,
     // Device ask for authentication
     Auth = 0x48545541, // OTHERS
-                       // A_SYNC 0x434e5953
-                       // A_OPEN 0x4e45504f
-                       // A_OKAY 0x59414b4f
-                       // A_WRTE 0x45545257
-                       // A_STLS 0x534C5453
+    Sync = 0x434e5953,
+    Open = 0x4e45504f,
+    Okay = 0x59414b4f,
+    Wrte = 0x45545257,
+    Stls = 0x534C5453,
 }
 
 impl Display for USBCommand {
@@ -23,6 +23,7 @@ impl Display for USBCommand {
             USBCommand::Cnxn => write!(f, "CNXN"),
             USBCommand::Clse => write!(f, "CLSE"),
             USBCommand::Auth => write!(f, "AUTH"),
+            _ => write!(f, "ehhh"),
         }
     }
 }

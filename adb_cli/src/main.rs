@@ -3,7 +3,7 @@
 mod commands;
 mod models;
 
-use adb_client::{ADBEmulatorDevice, ADBServer, ADBUSBDevice, DeviceShort};
+use adb_client::{search_adb_devices, ADBEmulatorDevice, ADBServer, ADBUSBDevice, DeviceShort};
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use commands::{EmuCommand, HostCommand, LocalCommand};
@@ -11,7 +11,7 @@ use env_logger::Builder;
 use log::LevelFilter;
 use models::{Command, Opts};
 use std::fs::File;
-use std::io::Write;
+use std::io::{stdin, Write};
 use std::path::Path;
 
 fn main() -> Result<()> {
@@ -153,9 +153,24 @@ fn main() -> Result<()> {
             }
         }
         Command::Usb(usb) => {
-            let mut device =
-                ADBUSBDevice::new(usb.vendor_id, usb.product_id, usb.path_to_private_key)?;
+            let (vid, pid) = if let (Some(vid), Some(pid)) = (usb.vendor_id, usb.product_id) {
+                (vid, pid)
+            } else if let Some((vid, pid)) = search_adb_devices() {
+                (vid, pid)
+            } else {
+                return Ok(());
+            };
+
+            let mut device = ADBUSBDevice::new(vid, pid, usb.path_to_private_key)?;
             device.send_connect()?;
+
+            loop {
+                let stdin = stdin();
+                for line in stdin.lines() {
+                    let res = device.shell(&line.expect("bad line"))?;
+                    println!("{res}");
+                }
+            }
         }
     }
 

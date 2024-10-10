@@ -10,6 +10,7 @@ use rsa::pkcs1::EncodeRsaPublicKey;
 use rsa::signature::SignatureEncoding;
 use rsa::signature::Signer;
 use rsa::{pkcs1v15::SigningKey, pkcs8::DecodePrivateKey, RsaPrivateKey, RsaPublicKey};
+use rusb::{Device, DeviceDescriptor, UsbContext};
 use sha1::Sha1;
 
 /// Represent a device reached directly over USB
@@ -33,6 +34,38 @@ fn read_adb_private_key(private_key_path: Option<PathBuf>) -> Option<RsaPrivateK
         .map_err(RustADBError::from)
         .and_then(|pk| Ok(RsaPrivateKey::from_pkcs8_pem(&pk)?))
         .ok()
+}
+
+fn is_adb_device<T: UsbContext>(device: &Device<T>, des: &DeviceDescriptor) -> bool {
+    for n in 0..des.num_configurations() {
+        let Ok(config_des) = device.config_descriptor(n) else {
+            continue;
+        };
+        for interface in config_des.interfaces() {
+            for interface_des in interface.descriptors() {
+                let proto = interface_des.protocol_code();
+                let class = interface_des.class_code();
+                let subcl = interface_des.sub_class_code();
+                if proto == 1 && ((class == 0xff && subcl == 0x42) || (class == 0xdc && subcl == 2))
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+/// Search for adb devices with known interface class and subclass values
+pub fn search_adb_devices() -> Option<(u16, u16)> {
+    for device in rusb::devices().unwrap().iter() {
+        let Ok(des) = device.device_descriptor() else {
+            continue;
+        };
+        if is_adb_device(&device, &des) {
+            return Some((des.vendor_id(), des.product_id()));
+        }
+    }
+    None
 }
 
 fn generate_keypair() -> Result<RsaPrivateKey> {
@@ -134,6 +167,65 @@ impl ADBUSBDevice {
         dbg!(response);
 
         Ok(())
+    }
+
+    /// run shell commands on a device
+    pub fn shell(&mut self, command: &str) -> Result<String> {
+        self.transport.connect()?;
+        let shell_string = format!("shell:{}\0", command);
+
+        let message = ADBUsbMessage::new(USBCommand::Open, 12345, 0, shell_string.clone().into());
+
+        self.transport.write_message(message)?;
+
+        println!("wrote shell string: {shell_string:?}");
+
+        let mut message = self.transport.read_message()?;
+
+        while message.header.command == USBCommand::Clse {
+            log::info!("ignoring batshit crazy commands");
+            message = self.transport.read_message()?;
+        }
+
+        if message.header.command != USBCommand::Okay {
+            return Err(RustADBError::ADBRequestFailed(format!(
+                "expected command OKAY after sending OPEN, got {}",
+                message.header.command
+            )));
+        }
+
+        let local_id = message.header.arg1;
+        let remote_id = message.header.arg0;
+
+        log::debug!("got message local_id: {local_id}, remote_id: {remote_id}");
+
+        // 4096 being the default payload size, most of the
+        // time, the payload is smaller than that.
+        let mut output = String::with_capacity(4096);
+
+        loop {
+            let received_response = self.transport.read_message()?;
+            match received_response.header.command {
+                USBCommand::Wrte => {
+                    let current_chunk = std::str::from_utf8(&received_response.payload)?;
+                    output.push_str(current_chunk);
+                    self.transport.write_message(ADBUsbMessage::new(
+                        USBCommand::Okay,
+                        local_id,
+                        remote_id,
+                        vec![0],
+                    ))?;
+                }
+                USBCommand::Clse => break,
+                _ => {
+                    return Err(RustADBError::ADBRequestFailed(format!(
+                        "expected output stream to emit WRTE (write) or CLSE (close) commands, got {}",
+                        message.header.command
+                    )));
+                }
+            }
+        }
+        Ok(output)
     }
 }
 
