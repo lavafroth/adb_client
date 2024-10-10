@@ -90,18 +90,17 @@ impl USBTransport {
 
         let mut data = [0; 24];
         // TODO: loop
-        let read = handle.read_bulk(endpoint.address, &mut data, max_timeout)?;
+        let _read = handle.read_bulk(endpoint.address, &mut data, max_timeout)?;
 
         let mut message = ADBUsbMessage::try_from(data)?;
 
         if message.header.data_length != 0 {
             let mut msg_data = vec![0_u8; message.header.data_length as usize];
             // TODO: loop
-            let read = handle.read_bulk(endpoint.address, &mut msg_data, max_timeout)?;
+            let _read = handle.read_bulk(endpoint.address, &mut msg_data, max_timeout)?;
             message.payload = msg_data;
         }
 
-        println!("read {read} - {message:?}");
         // println!("read {read} - {message:?}");
 
         Ok(message)
