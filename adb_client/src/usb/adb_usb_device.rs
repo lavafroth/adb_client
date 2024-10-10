@@ -234,6 +234,9 @@ impl ADBUSBDevice {
 
     /// pull a file from the `source` on device to `destination` on the host
     pub fn pull(&mut self, source: &str) -> Result<Vec<u8>> {
+        while let Ok(_message) = self.transport.read_message() {
+            log::info!("ignoring batshit crazy commands");
+        }
         println!("okay I'm pulling");
         self.transport.connect()?;
         let sync_directive = "sync:.\0";
