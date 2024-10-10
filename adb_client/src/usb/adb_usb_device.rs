@@ -1,16 +1,20 @@
 use std::fs::read_to_string;
+use std::io::{Cursor, Read, Seek};
 use std::path::PathBuf;
 
+use super::usb_commands::USBSubcommand;
 use super::ADBUsbMessage;
 use crate::usb::adb_usb_message::{AUTH_RSAPUBLICKEY, AUTH_SIGNATURE, AUTH_TOKEN};
 use crate::{usb::usb_commands::USBCommand, ADBTransport, Result, RustADBError, USBTransport};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use byteorder::{LittleEndian, ReadBytesExt};
 use rsa::pkcs1::EncodeRsaPublicKey;
 use rsa::signature::SignatureEncoding;
 use rsa::signature::Signer;
 use rsa::{pkcs1v15::SigningKey, pkcs8::DecodePrivateKey, RsaPrivateKey, RsaPublicKey};
 use rusb::{Device, DeviceDescriptor, UsbContext};
+use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 
 /// Represent a device reached directly over USB
@@ -21,6 +25,17 @@ pub struct ADBUSBDevice {
     // Signing key derived from the private key for signing messages
     signing_key: SigningKey<Sha1>,
     transport: USBTransport,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StatBuffer {
+    subcommand: USBSubcommand,
+    length: u32,
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ModeFileSize {
+    mode: u32,
+    file_size: u32,
 }
 
 fn read_adb_private_key(private_key_path: Option<PathBuf>) -> Option<RsaPrivateKey> {
@@ -169,7 +184,109 @@ impl ADBUSBDevice {
         Ok(())
     }
 
-    /// run shell commands on a device
+    /// ask the device for a file's stats
+    pub fn stat(
+        &mut self,
+        remote_path: &str,
+        local_id: u32,
+        remote_id: u32,
+    ) -> Result<ADBUsbMessage> {
+        let stat_buffer = StatBuffer {
+            subcommand: USBSubcommand::Stat,
+            length: remote_path.len() as u32,
+        };
+        let message = ADBUsbMessage::new(
+            USBCommand::Wrte,
+            local_id,
+            remote_id,
+            bincode::serialize(&stat_buffer).map_err(|_e| RustADBError::ConversionError)?,
+        );
+        self.must_send(message)?;
+        let message = ADBUsbMessage::new(USBCommand::Wrte, local_id, remote_id, remote_path.into());
+        self.must_send(message)?;
+        self.must_recv(local_id, remote_id)
+    }
+
+    /// Expect an `OKAY` after sending a message
+    pub fn must_recv(&mut self, local_id: u32, remote_id: u32) -> Result<ADBUsbMessage> {
+        let message = self.transport.read_message()?;
+        self.transport.write_message(ADBUsbMessage::new(
+            USBCommand::Okay,
+            local_id,
+            remote_id,
+            "".into(),
+        ))?;
+        Ok(message)
+    }
+
+    /// Expect an `OKAY` after sending a message
+    pub fn must_send(&mut self, message: ADBUsbMessage) -> Result<ADBUsbMessage> {
+        self.transport.write_message(message)?;
+        let message = self.transport.read_message()?;
+        if message.header.command != USBCommand::Okay {
+            return Err(RustADBError::ADBRequestFailed(format!(
+                "expected command OKAY after sending OPEN, got {}",
+                message.header.command
+            )));
+        }
+        Ok(message)
+    }
+
+    /// pull a file from the `source` on device to `destination` on the host
+    pub fn pull(&mut self, source: &str) -> Result<Vec<u8>> {
+        println!("okay I'm pulling");
+        self.transport.connect()?;
+        let sync_directive = "sync:.\0";
+        let message = ADBUsbMessage::new(USBCommand::Open, 12345, 0, sync_directive.into());
+
+        let message = self.must_send(message)?;
+        let local_id = message.header.arg1;
+        let remote_id = message.header.arg0;
+
+        println!("okay I'm stating");
+        let message = self.stat(source, local_id, remote_id)?;
+        let ModeFileSize { mode, file_size } = bincode::deserialize(&message.payload[4..])
+            .map_err(|_e| RustADBError::ConversionError)?;
+
+        println!("okay mode is {mode}");
+        println!("okay file size is {file_size}");
+        if mode == 0 {
+            return Err(RustADBError::UnknownResponseType(format!(
+                "expected command OKAY after sending OPEN, got {}",
+                message.header.command
+            )));
+        }
+
+        println!("Now I will try to send the StatBuffer AGAIN");
+
+        let recv_buffer = StatBuffer {
+            subcommand: USBSubcommand::Recv,
+            length: source.len() as u32,
+        };
+
+        let recv_buffer =
+            bincode::serialize(&recv_buffer).map_err(|_e| RustADBError::ConversionError)?;
+
+        println!("recv_buffer: {recv_buffer:?}");
+
+        self.must_send(ADBUsbMessage::new(
+            USBCommand::Wrte,
+            local_id,
+            remote_id,
+            recv_buffer,
+        ))?;
+        self.must_send(ADBUsbMessage::new(
+            USBCommand::Wrte,
+            local_id,
+            remote_id,
+            source.into(),
+        ))?;
+
+        let raw_data = self.recv_file(local_id, remote_id)?;
+        parse_file_data(raw_data)
+    }
+
+    /// Run shell commands
     pub fn shell(&mut self, command: &str) -> Result<String> {
         self.transport.connect()?;
         let shell_string = format!("shell:{}\0", command);
@@ -227,6 +344,52 @@ impl ADBUSBDevice {
         }
         Ok(output)
     }
+
+    fn recv_file(&mut self, local_id: u32, remote_id: u32) -> Result<Vec<u8>> {
+        println!("I will try to recv the file now");
+        let mut data = vec![];
+        loop {
+            let payload = self.must_recv(local_id, remote_id)?.into_payload();
+            let done = Cursor::new(&payload[(payload.len() - 8)..]).read_u32::<LittleEndian>()?;
+            println!("is it done? {done}");
+            data.extend_from_slice(&payload);
+            if done == USBSubcommand::Done as u32 {
+                break;
+            }
+        }
+        println!("I'm done with this file");
+        Ok(data)
+    }
+}
+
+fn parse_file_data(raw_data: Vec<u8>) -> Result<Vec<u8>> {
+    let mut file_data = vec![];
+    let mut cursor = Cursor::new(&raw_data);
+    println!("buffer length is {}", raw_data.len());
+    loop {
+        cursor.seek_relative(4)?;
+        println!("skipped 4 bytes; cursor is now at {}", cursor.position());
+        // pos is now 4
+        let len = cursor.read_u32::<LittleEndian>()?;
+        println!("length is {len} (idk this guy might be sus)");
+        if len == 0 {
+            return Ok(file_data);
+        }
+        let mut chunk = vec![0; len as usize];
+        cursor.read_exact(&mut chunk)?;
+        file_data.extend(chunk);
+        let done = cursor.read_u32::<LittleEndian>()?;
+        cursor.seek_relative(-4)?;
+        if done == USBSubcommand::Done as u32 {
+            break;
+        }
+    }
+    Ok(file_data)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RecvFileDone {
+    done: u32,
 }
 
 impl Drop for ADBUSBDevice {

@@ -102,6 +102,7 @@ impl USBTransport {
         }
 
         println!("read {read} - {message:?}");
+        // println!("read {read} - {message:?}");
 
         Ok(message)
     }

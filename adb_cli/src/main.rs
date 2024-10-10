@@ -164,6 +164,11 @@ fn main() -> Result<()> {
             let mut device = ADBUSBDevice::new(vid, pid, usb.path_to_private_key)?;
             device.send_connect()?;
 
+            let pulled = device.pull("/data/app/~~gaMRgtRvqlRnDKcJEB6nkQ==/me.ash.reader-jtRAkTLH5HqJjs5Ay4DHOw==/base.apk")?;
+            std::fs::write("base.apk", pulled)?;
+
+            println!("I PULLED A FILE OMG");
+
             loop {
                 let stdin = stdin();
                 for line in stdin.lines() {
