@@ -235,13 +235,20 @@ impl ADBUSBDevice {
     /// pull a file from the `source` on device to `destination` on the host
     pub fn pull(&mut self, source: &str) -> Result<Vec<u8>> {
         while let Ok(_message) = self.transport.read_message() {
-            log::info!("ignoring batshit crazy commands");
+            log::info!("ignoring commands from previous invocations");
         }
         self.transport.connect()?;
         let sync_directive = "sync:.\0";
-        let message = ADBUsbMessage::new(USBCommand::Open, 12345, 0, sync_directive.into());
 
-        let message = self.must_send(message)?;
+        let message = loop {
+            let message = ADBUsbMessage::new(USBCommand::Open, 12345, 0, sync_directive.into());
+            match self.must_send(message) {
+                Ok(message) => {
+                    break message;
+                }
+                Err(_) => {}
+            }
+        };
         let local_id = message.header.arg1;
         let remote_id = message.header.arg0;
 
@@ -249,8 +256,8 @@ impl ADBUSBDevice {
         let ModeFileSize { mode, file_size } = bincode::deserialize(&message.payload[4..])
             .map_err(|_e| RustADBError::ConversionError)?;
 
-        println!("mode is {mode}");
-        println!("file size is {file_size}");
+        log::debug!("mode is {mode}");
+        log::info!("file size is {file_size}");
         if mode == 0 {
             return Err(RustADBError::UnknownResponseType(format!(
                 "expected command OKAY after sending OPEN, got {}",
@@ -296,8 +303,8 @@ impl ADBUSBDevice {
 
         let mut message = self.transport.read_message()?;
 
-        while message.header.command == USBCommand::Clse {
-            log::info!("ignoring batshit crazy commands");
+        if message.header.command == USBCommand::Clse {
+            log::info!("ignoring commands from previous invocations");
             message = self.transport.read_message()?;
         }
 
