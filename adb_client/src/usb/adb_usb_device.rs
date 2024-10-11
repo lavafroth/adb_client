@@ -252,15 +252,8 @@ impl ADBUSBDevice {
         self.transport.connect()?;
         let sync_directive = "sync:.\0";
 
-        let message = loop {
-            let message = ADBUsbMessage::new(USBCommand::Open, 12345, 0, sync_directive.into());
-            match self.must_send(message) {
-                Ok(message) => {
-                    break message;
-                }
-                Err(_) => {}
-            }
-        };
+        let message = ADBUsbMessage::new(USBCommand::Open, 12345, 0, sync_directive.into());
+        let message = self.must_send(message)?;
         let local_id = message.header.arg1;
         let remote_id = message.header.arg0;
 
@@ -271,10 +264,9 @@ impl ADBUSBDevice {
         log::debug!("mode is {mode}");
         log::info!("file size is {file_size}");
         if mode == 0 {
-            return Err(RustADBError::UnknownResponseType(format!(
-                "expected command OKAY after sending OPEN, got {}",
-                message.header.command
-            )));
+            return Err(RustADBError::UnknownResponseType(
+                "mode is 0: source apk does not exist".to_string(),
+            ));
         }
 
         let recv_buffer = StatBuffer {
