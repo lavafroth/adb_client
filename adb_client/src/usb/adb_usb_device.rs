@@ -220,7 +220,7 @@ impl ADBUSBDevice {
     }
 
     /// Expect an `OKAY` after sending a message
-    pub fn must_send(&mut self, message: ADBUsbMessage) -> Result<ADBUsbMessage> {
+    pub fn send_and_expect_okay(&mut self, message: ADBUsbMessage) -> Result<ADBUsbMessage> {
         self.transport.write_message(message)?;
         let message = self.transport.read_message()?;
         if message.header.command != USBCommand::Okay {
@@ -230,6 +230,18 @@ impl ADBUSBDevice {
             )));
         }
         Ok(message)
+    }
+
+    /// Loop while a device doesn't respond to our message with an OKAY
+    pub fn must_send(&mut self, message: ADBUsbMessage) -> Result<ADBUsbMessage> {
+        Ok(loop {
+            match self.send_and_expect_okay(message.clone()) {
+                Ok(o) => {
+                    break o;
+                }
+                Err(_) => {}
+            }
+        })
     }
 
     /// pull a file from the `source` on device to `destination` on the host

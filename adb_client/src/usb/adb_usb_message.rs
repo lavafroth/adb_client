@@ -6,13 +6,13 @@ pub const AUTH_TOKEN: u32 = 1;
 pub const AUTH_SIGNATURE: u32 = 2;
 pub const AUTH_RSAPUBLICKEY: u32 = 3;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ADBUsbMessage {
     pub header: AdbUsbMessageHeader,
     pub payload: Vec<u8>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[repr(C)]
 pub(crate) struct AdbUsbMessageHeader {
     pub command: USBCommand, /* command identifier constant      */
