@@ -65,13 +65,13 @@ impl USBTransport {
         let written = handle.write_bulk(endpoint.address, message_bytes, max_timeout)?;
         println!("written {written}");
 
-        println!("writing payload...");
+        log::debug!("writing payload...");
 
         // TODO: loop
         let payload = message.into_payload();
         let written = handle.write_bulk(endpoint.address, &payload, max_timeout)?;
 
-        println!("written {written}");
+        log::debug!("written {written}");
 
         Ok(())
     }
