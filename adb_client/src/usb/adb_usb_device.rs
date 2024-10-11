@@ -202,8 +202,12 @@ impl ADBUSBDevice {
             bincode::serialize(&stat_buffer).map_err(|_e| RustADBError::ConversionError)?,
         );
         self.must_send(message)?;
-        let message = ADBUsbMessage::new(USBCommand::Wrte, local_id, remote_id, remote_path.into());
-        self.must_send(message)?;
+        self.must_send(ADBUsbMessage::new(
+            USBCommand::Wrte,
+            local_id,
+            remote_id,
+            remote_path.into(),
+        ))?;
         self.must_recv(local_id, remote_id)
     }
 
@@ -246,9 +250,6 @@ impl ADBUSBDevice {
 
     /// pull a file from the `source` on device to `destination` on the host
     pub fn pull(&mut self, source: &str) -> Result<Vec<u8>> {
-        while let Ok(_message) = self.transport.read_message() {
-            log::info!("ignoring commands from previous invocations");
-        }
         self.transport.connect()?;
         let sync_directive = "sync:.\0";
 
@@ -290,8 +291,7 @@ impl ADBUSBDevice {
             source.into(),
         ))?;
 
-        let raw_data = self.recv_file(local_id, remote_id)?;
-        parse_file_data(raw_data)
+        self.recv_file(local_id, remote_id, file_size)
     }
 
     /// Run shell commands
@@ -353,40 +353,57 @@ impl ADBUSBDevice {
         Ok(output)
     }
 
-    fn recv_file(&mut self, local_id: u32, remote_id: u32) -> Result<Vec<u8>> {
-        let mut data = vec![];
+    fn recv_file(&mut self, local_id: u32, remote_id: u32, file_size: u32) -> Result<Vec<u8>> {
+        println!("file size is {file_size}");
+        // Do this to not keep reallocating
+        let mut data = vec![0; file_size as usize];
+        let mut data_cursor = 0;
+
+        let mut len: Option<u64> = None;
         loop {
+            println!("new payload");
             let payload = self.must_recv(local_id, remote_id)?.into_payload();
-            let done = Cursor::new(&payload[(payload.len() - 8)..]).read_u32::<LittleEndian>()?;
-            data.extend_from_slice(&payload);
-            if done == USBSubcommand::Done as u32 {
+            let mut rdr = Cursor::new(&payload);
+            while rdr.position() != payload.len() as u64 {
+                match len.take() {
+                    Some(0) | None => {
+                        rdr.seek_relative(4)?;
+                        len.replace(rdr.read_u32::<LittleEndian>()? as u64);
+                    }
+                    Some(length) => {
+                        println!("len = {length}");
+                        let remaining_bytes = payload.len() as u64 - rdr.position();
+                        println!(
+                            "payload length {} - reader_position {} = {remaining_bytes}",
+                            payload.len(),
+                            rdr.position()
+                        );
+                        if length < remaining_bytes {
+                            rdr.read_exact(&mut data[data_cursor..data_cursor + length as usize])?;
+                            data_cursor += length as usize;
+                            println!("read {length} bytes");
+                        } else {
+                            rdr.read_exact(
+                                &mut data[data_cursor..data_cursor + remaining_bytes as usize],
+                            )?;
+                            data_cursor += remaining_bytes as usize;
+                            len.replace(length - remaining_bytes as u64);
+                            println!("read {remaining_bytes} bytes");
+                            // this payload is exhausted
+                            break;
+                        }
+                    }
+                }
+            }
+            if Cursor::new(&payload[(payload.len() - 8)..(payload.len() - 4)])
+                .read_u32::<LittleEndian>()?
+                == USBSubcommand::Done as u32
+            {
                 break;
             }
         }
         Ok(data)
     }
-}
-
-fn parse_file_data(raw_data: Vec<u8>) -> Result<Vec<u8>> {
-    let mut file_data = vec![];
-    let mut cursor = Cursor::new(&raw_data);
-    loop {
-        cursor.seek_relative(4)?;
-        // pos is now 4
-        let len = cursor.read_u32::<LittleEndian>()?;
-        if len == 0 {
-            return Ok(file_data);
-        }
-        let mut chunk = vec![0; len as usize];
-        cursor.read_exact(&mut chunk)?;
-        file_data.extend(chunk);
-        let done = cursor.read_u32::<LittleEndian>()?;
-        cursor.seek_relative(-4)?;
-        if done == USBSubcommand::Done as u32 {
-            break;
-        }
-    }
-    Ok(file_data)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
