@@ -350,6 +350,9 @@ impl ADBUSBDevice {
                 }
             }
         }
+
+        // devices can send an extra message we can discard
+        let _discard = self.transport.read_message();
         Ok(output)
     }
 
