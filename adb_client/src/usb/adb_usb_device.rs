@@ -158,10 +158,10 @@ impl ADBUSBDevice {
     pub(crate) fn send_and_expect_okay(&mut self, message: ADBUsbMessage) -> Result<ADBUsbMessage> {
         self.transport.write_message(message)?;
         let message = self.transport.read_message()?;
-        if message.command() != USBCommand::Okay {
+        if message.header().command() != USBCommand::Okay {
             return Err(RustADBError::ADBRequestFailed(format!(
                 "expected command OKAY after message, got {}",
-                message.command()
+                message.header().command()
             )));
         }
         Ok(message)

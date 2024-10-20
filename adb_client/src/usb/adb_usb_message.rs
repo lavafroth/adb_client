@@ -52,13 +52,6 @@ impl ADBUsbMessageHeader {
         self.data_length
     }
 
-    pub fn arg1(&self) -> u32 {
-        self.header.arg1
-    }
-
-    pub fn data_length(&self) -> u32 {
-        self.header.data_length
-  }
     pub fn data_crc32(&self) -> u32 {
         self.data_crc32
     }
