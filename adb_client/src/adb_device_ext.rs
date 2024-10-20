@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{Read, Write};
 
 use serde::{Deserialize, Serialize};
 
@@ -27,4 +27,9 @@ pub trait ADBDeviceExt {
 
     /// Pull the remote file `source` and write its contents into [`output`]
     fn pull<W: Write>(&mut self, source: &str, output: W) -> Result<()>;
+
+    /// Starts an interactive shell session on the device.
+    /// Input data is read from [reader] and write to [writer].
+    /// [W] has a 'static bound as it is internally used in a thread.
+    fn shell<R: Read, W: Write + Send + 'static>(&mut self, reader: R, writer: W) -> Result<()>;
 }

@@ -9,7 +9,7 @@ mod models;
 use adb_client::{ADBDeviceExt, ADBEmulatorDevice, ADBServer, ADBUSBDevice, DeviceShort};
 use anyhow::{anyhow, Result};
 use clap::Parser;
-use commands::{EmuCommand, HostCommand, LocalCommand, UsbSubcommand};
+use commands::{EmuCommand, HostCommand, LocalCommand, UsbCommands};
 use env_logger::Builder;
 use log::LevelFilter;
 use models::{Command, Opts};
@@ -56,8 +56,8 @@ fn main() -> Result<()> {
                     let stat_response = device.stat(path)?;
                     log::info!("{}", stat_response);
                 }
-                LocalCommand::Shell { command } => {
-                    if command.is_empty() {
+                LocalCommand::Shell { commands } => {
+                    if commands.is_empty() {
                         // Need to duplicate some code here as ADBTermios [Drop] implementation resets terminal state.
                         // Using a scope here would call drop() too early..
                         #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
                             device.shell(std::io::stdin(), std::io::stdout())?;
                         }
                     } else {
-                        device.shell_command(command, std::io::stdout())?;
+                        device.shell_command(commands, std::io::stdout())?;
                     }
                 }
                 LocalCommand::HostFeatures => {
@@ -170,17 +170,33 @@ fn main() -> Result<()> {
         Command::Usb(usb) => {
             let mut device =
                 ADBUSBDevice::new(usb.vendor_id, usb.product_id, usb.path_to_private_key)?;
-            device.send_connect()?;
+
             match usb.commands {
-                UsbSubcommand::Pull => {
+                UsbCommands::Shell { commands } => {
+                    if commands.is_empty() {
+                        // Need to duplicate some code here as ADBTermios [Drop] implementation resets terminal state.
+                        // Using a scope here would call drop() too early..
+                        #[cfg(any(target_os = "linux", target_os = "macos"))]
+                        {
+                            let mut adb_termios = adb_termios::ADBTermios::new(std::io::stdin())?;
+                            adb_termios.set_adb_termios()?;
+                            device.shell(std::io::stdin(), std::io::stdout())?;
+                        }
+
+                        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+                        {
+                            device.shell(std::io::stdin(), std::io::stdout())?;
+                        }
+                    } else {
+                        device.shell_command(commands, std::io::stdout())?;
+                    }
+                },
+                UsbCommands::Pull { source } => {
                     let mut pulled = Vec::with_capacity(4096);
                     device.pull("/etc/hosts", Cursor::new(&mut pulled))?;
                     println!("{:?}", &pulled[0..10]);
                 }
-                UsbSubcommand::Shell => {
-                    device.shell_command(["id"], std::io::stdout())?;
-                }
-            };
+            }
         }
     }
 

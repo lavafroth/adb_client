@@ -19,11 +19,12 @@ pub struct UsbCommand {
     #[clap(short = 'k', long = "private-key")]
     pub path_to_private_key: Option<PathBuf>,
     #[clap(subcommand)]
-    pub commands: UsbSubcommand,
+    pub commands: UsbCommands,
 }
 
 #[derive(Parser, Debug)]
-pub enum UsbSubcommand {
-    Shell,
-    Pull,
+pub enum UsbCommands {
+    /// Spawn an interactive shell or run a list of commands on the device
+    Shell { commands: Vec<String> },
+    Pull { source: String },
 }
