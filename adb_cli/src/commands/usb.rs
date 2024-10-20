@@ -18,9 +18,12 @@ pub struct UsbCommand {
     /// Path to a custom private key to use for authentication
     #[clap(short = 'k', long = "private-key")]
     pub path_to_private_key: Option<PathBuf>,
-    // #[clap(subcommand)]
-    // pub commands: UsbCommands
+    #[clap(subcommand)]
+    pub commands: UsbSubcommand,
 }
 
 #[derive(Parser, Debug)]
-pub enum UsbCommands {}
+pub enum UsbSubcommand {
+    Shell,
+    Pull,
+}

@@ -9,12 +9,12 @@ mod models;
 use adb_client::{ADBDeviceExt, ADBEmulatorDevice, ADBServer, ADBUSBDevice, DeviceShort};
 use anyhow::{anyhow, Result};
 use clap::Parser;
-use commands::{EmuCommand, HostCommand, LocalCommand};
+use commands::{EmuCommand, HostCommand, LocalCommand, UsbSubcommand};
 use env_logger::Builder;
 use log::LevelFilter;
 use models::{Command, Opts};
 use std::fs::File;
-use std::io::Write;
+use std::io::{Cursor, Write};
 use std::path::Path;
 
 fn main() -> Result<()> {
@@ -171,7 +171,16 @@ fn main() -> Result<()> {
             let mut device =
                 ADBUSBDevice::new(usb.vendor_id, usb.product_id, usb.path_to_private_key)?;
             device.send_connect()?;
-            device.shell_command(["id"], std::io::stdout())?;
+            match usb.commands {
+                UsbSubcommand::Pull => {
+                    let mut pulled = Vec::with_capacity(4096);
+                    device.pull("/etc/hosts", Cursor::new(&mut pulled))?;
+                    println!("{:?}", &pulled[0..10]);
+                }
+                UsbSubcommand::Shell => {
+                    device.shell_command(["id"], std::io::stdout())?;
+                }
+            };
         }
     }
 
