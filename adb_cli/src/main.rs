@@ -195,12 +195,12 @@ fn main() -> Result<()> {
                     source,
                     destination,
                 } => {
-                    let dst = std::fs::OpenOptions::new()
+                    let mut dst = std::fs::OpenOptions::new()
                         .create(true)
                         .write(true)
                         .truncate(true)
                         .open(&destination)?;
-                    device.pull(&source, dst)?;
+                    device.recv(&source, &mut dst)?;
                     println!("wrote {source:?} from device to {destination:?} on host");
                 }
             }

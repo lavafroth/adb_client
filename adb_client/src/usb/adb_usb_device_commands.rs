@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use rand::Rng;
 
 use crate::{
-    usb::{ADBUsbMessage, SubcommandWithArg, USBCommand, USBSubcommand},
+    usb::{ADBUsbMessage, USBCommand, USBSubcommand},
     ADBDeviceExt, ADBUSBDevice, FileStat, Result, RustADBError,
 };
 
@@ -133,8 +133,9 @@ impl ADBDeviceExt for ADBUSBDevice {
         bincode::deserialize(&response.into_payload()).map_err(|_e| RustADBError::ConversionError)
     }
 
-    fn pull<W: Write>(&mut self, source: &str, output: W) -> Result<()> {
+    fn recv<A: AsRef<str>>(&mut self, path: A, stream: &mut dyn Write) -> Result<()> {
         let sync_directive = "sync:.\0";
+        let source = path.as_ref();
 
         let message = ADBUsbMessage::new(USBCommand::Open, 12345, 0, sync_directive.into());
         let message = self.send_and_expect_okay(message)?;
@@ -166,6 +167,6 @@ impl ADBDeviceExt for ADBUSBDevice {
             source.into(),
         ))?;
 
-        self.recv_file(local_id, remote_id, output)
+        self.recv_file(local_id, remote_id, stream)
     }
 }

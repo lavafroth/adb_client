@@ -62,9 +62,6 @@ impl ADBDeviceExt for ADBServerDevice {
         todo!()
     }
 
-    fn pull<W: Write>(&mut self, source: &str, output: W) -> Result<()> {
-        todo!()
-    }
     fn shell<R: Read, W: Write + Send + 'static>(
         &mut self,
         mut reader: R,
@@ -116,5 +113,9 @@ impl ADBDeviceExt for ADBServerDevice {
         }
 
         Ok(())
+    }
+
+    fn recv<A: AsRef<str>>(&mut self, path: A, stream: &mut dyn Write) -> Result<()> {
+        self.recv(path, stream)
     }
 }

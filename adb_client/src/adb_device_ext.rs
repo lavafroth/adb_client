@@ -25,8 +25,8 @@ pub trait ADBDeviceExt {
     /// Display the stat for a remote file
     fn stat(&mut self, remote_path: &str, local_id: u32, remote_id: u32) -> Result<FileStat>;
 
-    /// Pull the remote file `source` and write its contents into [`output`]
-    fn pull<W: Write>(&mut self, source: &str, output: W) -> Result<()>;
+    /// Pull the remote file `path` and write its contents into [`stream`]
+    fn recv<A: AsRef<str>>(&mut self, path: A, stream: &mut dyn Write) -> Result<()>;
 
     /// Starts an interactive shell session on the device.
     /// Input data is read from [reader] and write to [writer].
